@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans&display=swap" rel="stylesheet">
+    <title>Flapy Bird</title>
+    <link rel="stylesheet" href="flappybird.css">
+</head>
+<body>
+    <canvas id = "canvas" width = "288" height = "512"></canvas>
+    
+    <script>
+        var cvs = document.querySelector('canvas');
+        var ctx = cvs.getContext('2d');
+
+        let frames = 0;
+        const DEGREE = Math.PI / 180;
+
+        //Sounds
+        const ScoreS = new Audio();
+        ScoreS.src = './Images/audio/sfx_point.wav';
+
+        const FlapS = new Audio();
+        FlapS.src = './Images/audio/sfx_flap.wav';
+
+        const HitS = new Audio();
+        HitS.src = './Images/audio/sfx_hit.wav';
+
+        const SwooshingS = new Audio();
+        SwooshingS.src = './Images/audio/sfx_swooshing.wav';
+
+        const DieS = new Audio();
+        DieS.src = './Images/audio/sfx_die.wav';
+
+        const state = {
+            current: 0,
+            getReady: 0,
+            game: 1,
+            over:2
+        }
+       
+        const bg = {
+            img: new Image(),
+            w: 288,
+            h: 512,
+            x: 0,
+            y: 0, 
+            
+            draw :function (){
+                this.img.src = './Images/bg.png';
+                ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+            }
+        }
+        const fg = {
+            img: new Image(),
+            w: 336,
+            h: 112,
+            x: 0,
+            y: cvs.height - 112, 
+            dx: 2,
+            draw :function (){
+                this.img.src = './Images/base.png';
+                ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+                ctx.drawImage(this.img, this.x + cvs.width, this.y, this.w, this.h);
+                
+            },
+
+            update: function(){
+                if(state.current === state.game){
+                    this.x = (this.x - this.dx) % this.w;
+                }
+            }
+        }
+        const getReady = {
+            img: new Image(),
+            w: 173,
+            h: 161,
+            x: cvs.width/2 - 173/2,
+            y: 80, 
+            
+            draw :function (){
+                this.img.src = './Images/getready.png';
+                if(state.current === state.getReady){
+                    ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+                }
+            }
+        }
+        const gameOver = {
+            img: new Image(),
+            w: 203,
+            h: 204,
+            x: cvs.width/2 - 203/2,
+            y: 80, 
+            
+            draw :function (){
+                this.img.src = './Images/gameover.png';
+                if(state.current === state.over){
+                    ctx.drawImage(this.img, this.x, this.y, this.w, this.h);
+                }
+            }
+        }
+        const score = {
+            best : parseInt(localStorage.getItem('best')) || 0,
+            value: 0,
+
+            draw: function(){
+                ctx.fillStyle = '#FFF';
+                ctx.strokeStyle = 'rgb(79, 167, 79)';
+
+                if(state.current === state.game)
+                {
+                    ctx.lineWidth = 1;
+                    ctx.font = '50px Sans';
+                    ctx.fillText(this.value,cvs.width /2 , 50);
+                    ctx.strokeText(this.value, cvs.width/2, 50);
+
+                }
+                else if(state.current === state.over)
+                {
+                    ctx.strokeStyle = '#000';
+                    ctx.font = '25px Sans';
+                    ctx.fillText(this.value, 200 , 178);
+                    ctx.strokeText(this.value, 200, 178);
+
+                    ctx.fillText(this.best, 200 , 219);
+                    ctx.strokeText(this.best, 200, 219);
+
+                }
+            },
+            reset: function(){
+                this.value = 0;
+            }
+        }
+        const pipes = {
+            topPipe: new Image(),
+            bottomPipe: new Image(), 
+            w: 52,
+            h: 320,
+            dx: 2,
+            gap: 85,
+            maxYPos: -150,
+            position: [],
+
+            draw: function(){
+
+                this.topPipe.src = './Images/toppipe.png';
+                this.bottomPipe.src = './Images/bottompipe.png';
+
+                if(state.current === state.game){
+                    for(let i = 0; i < this.position.length; i++)
+                    {
+                        let p = this.position[i];
+                        let topY = p.y;
+                        let bottomY = p.y + this.h + this.gap;
+
+                        ctx.drawImage(this.topPipe, p.x, topY, this.w, this.h);
+                        ctx.drawImage(this.bottomPipe, p.x, bottomY, this.w, this.h);
+                    }
+                }
+            },
+            update: function()
+            {
+                if(state.current === state.game){
+                    if(frames % 100 == 0)
+                    {
+                        this.position.push({
+                                x: cvs.width,
+                                y: (Math.random() + 1)* this.maxYPos
+                        });
+                    }
+                    for(let i = 0; i < this.position.length; i++)
+                    {
+                        let p = this.position[i];
+                        let bottomY = p.y + this.h + this.gap;
+
+                        if(p.x + this.w <= 0){
+                            this.position.shift();
+                            score.value += 1;
+                            ScoreS.play();
+                            
+                            score.best = Math.max(score.value, score.best);
+                            localStorage.setItem('best', score.best);
+                        } 
+                        if(bird.x + 17 > p.x && bird.x - 17 < p.x + this.w && 
+                            bird.y + 12 > p.y && bird.y - 12 < p.y + this.h ){
+                            state.current = state.over;
+                            HitS.play();
+                        }
+                        if(bird.x + 17 > p.x && bird.x - 17 < p.x + this.w && 
+                            bird.y + 12 > bottomY && bird.y - 12 < bottomY + this.h ){
+                            state.current = state.over;
+                            HitS.play();
+                        }
+                        p.x -= this.dx;
+                    }
+                }
+            },
+            reset: function(){
+                this.position = [];
+            }
+        }
+        const bird = {
+            img: new Image(),
+            path:['./Images/bird1.png', './Images/bird2.png', './Images/bird3.png', './Images/bird2.png'],
+            frame: 0,
+            period: 0,
+            w: 34,
+            h: 24,
+            x: 45,
+            y: 145, 
+            gravity: 0.25,
+            jump: 3.6,
+            speed:0,
+            rotation: 0,
+
+            draw :function (){
+                this.img.src = this.path[this.frame];
+                ctx.save();
+                ctx.translate(this.x, this.y); //Change Origin
+                ctx.rotate(this.rotation);
+                //ctx.drawImage(this.img, this.x - this.w/2, this.y - this.h/2, this.w, this.h);
+                ctx.drawImage(this.img, - this.w/2, - this.h/2, this.w, this.h);
+                ctx.restore();
+            },
+            flap: function(){
+                this.speed = -this.jump;
+            },
+            update: function (){
+                this.period = state.current == state.getReady ? 10:5;
+                this.frame += frames % this.period == 0 ? 1:0;
+                this.frame = this.frame % this.path.length;
+
+                if(state.current === state.getReady)
+                {
+                    this.y = 145;
+                    this.rotation  = 0*DEGREE;
+                }
+                else{
+                    this.speed += this.gravity;
+                    this.y += this.speed;
+
+                    if(this.y + this.h/2 >= cvs.height - fg.h)
+                    {
+                        this.y = cvs.height - fg.h - this.h/2;
+                        state.current = state.over;
+                        this.frame = 1;
+                        DieS.play();
+                    }
+                    if(this.speed >= this.jump){
+                        this.rotation = 90 * DEGREE;
+                    }
+                    else{
+                        this.rotation = -25 * DEGREE;
+                    }
+                }
+            },
+            speedReset: function (){
+                this.speed = 0;
+            }
+        }
+
+        const startButton = {
+            x: getReady.x + 72,
+            y: getReady.y + 171,
+            w: 83,
+            h: 29, 
+        } 
+
+        birdMove = function(event){
+            switch(state.current)
+            {
+                case state.getReady:
+                    state.current = state.game;
+                    SwooshingS.play();
+                    break;
+                case state.game:
+                    bird.flap();
+                    FlapS.play();
+                    break;
+                case state.over:
+                    let rect = cvs.getBoundingClientRect();
+                    let clientX = event.clientX - rect.left;
+                    let clientY = event.clientY - rect.top;
+                    if(clientX > startButton.x && clientX <= startButton.x + startButton.w &&
+                        clientY > startButton.y && clientY <= startButton.y + startButton.h){
+
+                            pipes.reset();
+                            score.reset();
+                            bird.speedReset();
+                            state.current = state.getReady;
+                    } 
+                    break;
+            }
+        }
+        cvs.addEventListener('click', birdMove);
+        document.addEventListener('keydown', function(event){
+            if(event.keyCode === 32){ // 32 is keyCode For Space.
+                birdMove();
+            }
+        })
+        
+        draw = function(){
+            bg.draw();
+            pipes.draw();
+            fg.draw();
+            bird.draw();
+            getReady.draw();
+            gameOver.draw();
+            score.draw();
+        }
+        update = function(){
+            bird.update();
+            fg.update();
+            pipes.update();
+        }
+        loop = function(){
+            update();
+            draw();
+
+            frames++;
+            //console.log(frames);
+            requestAnimationFrame(loop);
+        }
+        loop();
+        
+    </script>
+</body>
+</html>
